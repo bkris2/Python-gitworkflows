@@ -1,0 +1,40 @@
+name: Manual Deploy Workflow - Starter
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      version:
+        description: 'Version to deploy (optional)'
+        required: false
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Print inputs
+        run: |
+          echo "Deploying to: ${{ github.event.inputs.environment }}"
+          echo "Version: ${{ github.event.inputs.version || 'latest' }}"
+
+      - name: Deploy
+        run: |
+          echo "Running deployment to ${{ github.event.inputs.environment }}..."
+          # Add your deployment script here
+          # ./scripts/deploy.sh ${{ github.event.inputs.environment }}
+
+      - name: Verify deployment
+        run: echo "Deployment to ${{ github.event.inputs.environment }} completed!"

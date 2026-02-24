@@ -1,0 +1,162 @@
+name: On Pull Request Workflow
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'requirements.txt'
+      - '.github/workflows/on_pull_request.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+jobs:
+  validate-pr:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Check PR title
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          if [[ ! $PR_TITLE =~ ^(feat|fix|docs|style|refactor|test|chore): ]]; then
+            echo "❌ PR title must follow convention: feat|fix|docs|etc: description"
+            exit 1
+          fi
+          echo "✓ PR title is valid"
+
+      - name: Check for large files
+        run: |
+          git diff --name-only --diff-filter=A ${{ github.event.pull_request.base.sha }} | while read file; do
+            size=$(wc -c < "$file")
+            if [ $size -gt 10485760 ]; then
+              echo "❌ File $file is larger than 10MB"
+              exit 1
+            fi
+          done
+          echo "✓ All files are within size limits"
+
+  test-changes:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+    
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov flake8 black
+
+      - name: Run flake8
+        run: |
+          flake8 src/ tests/ --count --show-source --statistics
+
+      - name: Check code formatting with black
+        run: |
+          black --check src/ tests/ || echo "Code formatting issues found"
+
+      - name: Run unit tests
+        run: |
+          pytest tests/ -v --cov=src --cov-report=xml
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+  code-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install quality tools
+        run: |
+          pip install pylint mypy bandit
+
+      - name: Run pylint
+        run: |
+          pylint src/ --fail-under=8.0 || echo "Pylint warnings found"
+
+      - name: Run mypy type checking
+        run: |
+          mypy src/ --ignore-missing-imports || echo "Type checking issues found"
+
+      - name: Security scan with bandit
+        run: |
+          bandit -r src/ --severity-level medium || echo "Security issues found"
+
+  pr-comment:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [validate-pr, test-changes, code-quality]
+    
+    steps:
+      - name: Comment PR with status
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const conclusion = '${{ needs.test-changes.result }}';
+            const body = conclusion === 'success' 
+              ? '✅ All checks passed! Ready for merge.' 
+              : '❌ Some checks failed. Please review the logs above.';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  auto-assign:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.author_association == 'CONTRIBUTOR'
+    
+    steps:
+      - name: Auto-assign to reviewers
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.addAssignees({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              assignees: ['maintainer1', 'maintainer2']
+            });
+            console.log('PR auto-assigned to reviewers');
