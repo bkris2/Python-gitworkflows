@@ -668,6 +668,142 @@ Model accuracy drop,High,Medium,MLTeam,Baseline tests and retrain if needed,Open
 
 ---
 
+## Endpoint Comparison: SageMaker → Vertex AI
+
+This section compares SageMaker model endpoints and invocation patterns with Vertex AI endpoints, including URLs, auth, request/response, and common migration notes.
+
+- **Endpoint resource**
+    - SageMaker: Managed endpoint identified by name (e.g., `prod-endpoint`). Hosted inside AWS; invoked via the SageMaker Runtime API: `runtime.sagemaker.amazonaws.com` with SigV4.
+    - Vertex AI: Endpoint resource identified by full resource name `projects/{project}/locations/{location}/endpoints/{endpoint_id}` and invoked via REST: `https://{location}-aiplatform.googleapis.com/v1/{endpoint}:predict` or via the Python SDK.
+
+- **Authentication**
+    - SageMaker: AWS SigV4 (IAM role/user) when calling REST; SDKs (boto3) use configured credentials. Example: `boto3.client('sagemaker-runtime').invoke_endpoint(...)`.
+    - Vertex AI: OAuth2 Bearer tokens (service accounts). Use `gcloud auth print-access-token`, ADC (`GOOGLE_APPLICATION_CREDENTIALS`) or client libraries which handle auth.
+
+- **Typical REST invocation**
+    - SageMaker (via AWS SDK)
+        - Python: `boto3.client('sagemaker-runtime').invoke_endpoint(EndpointName='prod-endpoint', ContentType='application/json', Body=json.dumps(instances))`
+        - REST (signed): POST to `https://runtime.sagemaker.{region}.amazonaws.com/endpoints/{endpoint_name}/invocations` with SigV4 signed headers.
+    - Vertex AI (REST)
+        - REST: POST to `https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/endpoints/{endpoint_id}:predict` with `Authorization: Bearer $(gcloud auth print-access-token)` and JSON body `{ "instances": [...] }`.
+
+- **Request/Response formats**
+    - SageMaker: Body can be raw bytes or JSON; SDK returns `{'Body': b'...', 'ContentType': '...'} `; higher-level SDKs may return deserialized predictions.
+    - Vertex AI: JSON request `{ "instances": [...] }`; response contains `predictions` array and optional `deployedModelId` and metadata.
+
+- **Batch prediction**
+    - SageMaker: Batch Transform jobs with S3 input/output paths.
+    - Vertex AI: Batch Prediction jobs using GCS input/output and BigQuery integrations.
+
+- **Autoscaling & replicas**
+    - SageMaker: configure `InitialInstanceCount` and instance types; use autoscaling policies on endpoint.
+    - Vertex AI: configure `min_replica_count`, `max_replica_count`, and autoscaling policies; manage traffic splits at endpoint level.
+
+- **Logging & Monitoring**
+    - SageMaker: CloudWatch for logs/metrics; Model Monitor for data/feature drift.
+    - Vertex AI: Cloud Logging / Monitoring and Model Monitoring in Vertex; can export to BigQuery for analysis.
+
+- **Migration notes / pitfalls**
+    - Auth differences: migrate IAM role assumptions to GCP service accounts and update code that relies on AWS credential flows.
+    - URL/endpoint naming: SageMaker endpoints are region-scoped and named; Vertex uses full resource names—update tooling and infra scripts accordingly.
+    - Request semantics: confirm content-type, serialization (JSON vs. protobuf), and input shape—some models expect different input wrappers.
+    - Cold start behavior: Vertex AI and SageMaker may have different cold-start times—benchmark and adjust `min_replica_count`.
+
+### Examples
+
+Python — SageMaker invoke (boto3):
+```python
+import boto3, json
+client = boto3.client('sagemaker-runtime', region_name='us-east-1')
+resp = client.invoke_endpoint(
+        EndpointName='prod-endpoint',
+        ContentType='application/json',
+        Body=json.dumps({'instances': [[1.0, 2.0, 3.0]]})
+)
+result = json.loads(resp['Body'].read())
+print(result)
+```
+
+Signed REST (SigV4) — SageMaker
+
+Option A — AWS CLI (easy, avoids manual signing):
+```bash
+# Prepare payload file
+echo '{"instances": [[1.0,2.0,3.0]]}' > payload.json
+
+# Invoke endpoint using AWS CLI (outputs base64 when using binary payloads)
+aws sagemaker-runtime invoke-endpoint \
+    --endpoint-name prod-endpoint \
+    --content-type application/json \
+    --body fileb://payload.json \
+    --region us-east-1 \
+    response.json
+
+cat response.json
+```
+
+Option B — Python: sign HTTP request with SigV4 using botocore and send via `requests` (produces curl-like POST):
+```python
+import json
+import boto3
+import requests
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
+
+region = 'us-east-1'
+endpoint_name = 'prod-endpoint'
+url = f"https://runtime.sagemaker.{region}.amazonaws.com/endpoints/{endpoint_name}/invocations"
+
+payload = json.dumps({"instances": [[1.0, 2.0, 3.0]]})
+
+session = boto3.Session()
+credentials = session.get_credentials().get_frozen_credentials()
+
+aws_request = AWSRequest(method='POST', url=url, data=payload, headers={
+        'Content-Type': 'application/json'
+})
+
+SigV4Auth(credentials, 'sagemaker', region).add_auth(aws_request)
+
+prepared_headers = dict(aws_request.headers)
+
+resp = requests.post(url, data=payload, headers=prepared_headers)
+print(resp.status_code)
+print(resp.text)
+```
+
+Notes:
+- The Python example uses `boto3`/`botocore` to generate the SigV4 Authorization header and other required headers, then sends the signed request with `requests`.
+- For one-off calls, prefer `aws sagemaker-runtime invoke-endpoint`. For integrating into infra where raw REST calls are required, use the signing approach.
+
+Curl — Vertex AI invoke (REST):
+```bash
+ACCESS_TOKEN=$(gcloud auth application-default print-access-token)
+curl -s -X POST \
+    -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+    -H "Content-Type: application/json" \
+    https://us-central1-aiplatform.googleapis.com/v1/projects/PROJECT/locations/us-central1/endpoints/ENDPOINT_ID:predict \
+    -d '{"instances": [[1.0,2.0,3.0]]}'
+```
+
+Python — Vertex AI SDK invoke:
+```python
+from google.cloud import aiplatform
+
+endpoint = aiplatform.Endpoint(endpoint_name="projects/PROJECT/locations/us-central1/endpoints/ENDPOINT_ID")
+response = endpoint.predict(instances=[[1.0,2.0,3.0]])
+print(response)
+```
+
+### Quick mapping cheat-sheet
+
+ - SageMaker endpoint name → Vertex endpoint resource id
+ - S3 input/output → GCS input/output (update URI patterns)
+ - SigV4 auth → OAuth2 service account tokens / ADC
+ - `invoke_endpoint` (boto3) → `Endpoint.predict()` (Vertex SDK) or REST `:predict`
+
+---
+
 ## References & Resources
 
 - [GCP Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)
