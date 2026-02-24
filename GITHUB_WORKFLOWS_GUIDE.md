@@ -7,6 +7,12 @@ A comprehensive guide to setting up, writing, and troubleshooting GitHub Actions
 2. [Workflow Structure](#workflow-structure)
 3. [Common Triggers](#common-triggers)
 4. [Example Workflows](#example-workflows)
+   - [Example 1: Python Testing & Linting](#example-1-python-testing--linting)
+   - [Example 2: Build & Deploy to GCP Vertex AI](#example-2-build--deploy-to-gcp-vertex-ai)
+   - [Example 3: Automated Version Bumping & Release](#example-3-automated-version-bumping--release)
+   - [Example 4: Data Validation on PR & Push](#example-4-data-validation-on-pr--push)
+   - [Example 5: Scheduled Model Retraining](#example-5-scheduled-model-retraining)
+   - [Example 6: PR Approval Workflow (Require Specific User)](#example-6-pr-approval-workflow-require-specific-user)
 5. [Advanced Topics](#advanced-topics)
 6. [Troubleshooting](#troubleshooting)
 
@@ -361,6 +367,99 @@ jobs:
               body: '⚠️ Scheduled retraining failed!'
             })
 ```
+
+### Example 6: PR Approval Workflow (Require Specific User)
+
+This workflow **blocks execution** until a specific user approves the PR.
+
+```yaml
+name: PR Approval & Trigger
+
+on:
+  pull_request:
+    branches: [main, develop]
+    types: [opened, synchronize, reopened]
+  pull_request_review:
+    branches: [main, develop]
+    types: [submitted]
+
+jobs:
+  check-approval:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Check if approved by bkris2
+        id: check_approval
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { owner, repo, number } = context.issue;
+            const reviews = await github.rest.pulls.listReviews({
+              owner,
+              repo,
+              pull_number: number
+            });
+
+            const approvalByBkris2 = reviews.data.some(review =>
+              review.user.login === 'bkris2' && review.state === 'APPROVED'
+            );
+
+            console.log(`Approval by bkris2: ${approvalByBkris2}`);
+            core.setOutput('approved', approvalByBkris2);
+
+      - name: Fail if not approved by bkris2
+        if: steps.check_approval.outputs.approved != 'true'
+        run: |
+          echo "❌ PR must be approved by bkris2 before workflow can proceed"
+          exit 1
+
+  build-and-test:
+    needs: check-approval
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt 2>/dev/null || echo "No requirements.txt found"
+
+      - name: Run linting
+        run: |
+          pip install flake8
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || true
+
+      - name: Run tests
+        run: |
+          pip install pytest
+          pytest tests/ -v 2>/dev/null || echo "No tests found"
+
+      - name: ✅ Workflow completed successfully
+        run: echo "All checks passed after bkris2 approval!"
+```
+
+**Key Points:**
+- Triggers on `pull_request_review` with `types: [submitted]` to run after review is submitted
+- Uses `actions/github-script@v6` to query PR reviews via GitHub API
+- Checks if user `bkris2` has given an `APPROVED` review
+- `check-approval` job fails (exits with 1) if approval not found
+- `build-and-test` job has `needs: check-approval`, so it only runs after approval succeeds
+- ✅ Once `bkris2` approves, workflow continues to build and test stages
+
+**To customize the approving user:** Replace `'bkris2'` with any GitHub username.
 
 ---
 

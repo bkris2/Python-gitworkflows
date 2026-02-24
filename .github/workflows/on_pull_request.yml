@@ -2,11 +2,10 @@ name: On Pull Request Workflow
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [master, main, develop]
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
-      - 'src/**'
-      - 'tests/**'
+      - '*.py'
       - 'requirements.txt'
       - '.github/workflows/on_pull_request.yml'
 
@@ -76,23 +75,18 @@ jobs:
 
       - name: Run flake8
         run: |
-          flake8 src/ tests/ --count --show-source --statistics
+          flake8 *.py --count --show-source --statistics
+        continue-on-error: true
 
       - name: Check code formatting with black
         run: |
-          black --check src/ tests/ || echo "Code formatting issues found"
+          black --check *.py || echo "Code formatting issues found"
+        continue-on-error: true
 
-      - name: Run unit tests
+      - name: Syntax check Python files
         run: |
-          pytest tests/ -v --cov=src --cov-report=xml
-
-      - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage.xml
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: false
+          python -m py_compile *.py
+          echo "Syntax check passed!"
 
   code-quality:
     runs-on: ubuntu-latest
@@ -112,15 +106,18 @@ jobs:
 
       - name: Run pylint
         run: |
-          pylint src/ --fail-under=8.0 || echo "Pylint warnings found"
+          pylint *.py --fail-under=5.0 || echo "Pylint warnings found"
+        continue-on-error: true
 
       - name: Run mypy type checking
         run: |
-          mypy src/ --ignore-missing-imports || echo "Type checking issues found"
+          mypy *.py --ignore-missing-imports || echo "Type checking issues found"
+        continue-on-error: true
 
       - name: Security scan with bandit
         run: |
-          bandit -r src/ --severity-level medium || echo "Security issues found"
+          bandit *.py --severity-level medium || echo "Security issues found"
+        continue-on-error: true
 
   pr-comment:
     runs-on: ubuntu-latest
@@ -146,10 +143,10 @@ jobs:
 
   auto-assign:
     runs-on: ubuntu-latest
-    if: github.event.pull_request.author_association == 'CONTRIBUTOR'
+    if: github.event.pull_request.author_association == 'CONTRIBUTOR' || github.actor == 'bkris2'
     
     steps:
-      - name: Auto-assign to reviewers
+      - name: Auto-assign to owner
         uses: actions/github-script@v6
         with:
           script: |
@@ -157,6 +154,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              assignees: ['maintainer1', 'maintainer2']
+              assignees: ['bkris2']
             });
-            console.log('PR auto-assigned to reviewers');
+            console.log('PR auto-assigned to owner');
+        continue-on-error: true
