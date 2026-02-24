@@ -2,10 +2,10 @@ name: PR Approval & Trigger
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [master]
     types: [opened, synchronize, reopened]
   pull_request_review:
-    branches: [main, develop]
+    branches: [master]
     types: [submitted]
 
 jobs:
