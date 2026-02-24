@@ -630,6 +630,44 @@ aws s3 mv s3://sagemaker-bucket s3://archive-bucket --recursive
 
 ---
 
+## Risks & Mitigation Strategies
+
+Below are the primary risks for this migration along with impact, likelihood, and recommended mitigations. Track these in your project risk register and assign an owner for each.
+
+- **Data transfer failure or corruption**: Impact — High; Likelihood — Medium.
+    - Mitigation: use `gsutil -m` or Storage Transfer Service with checksums, enable resumable uploads, verify checksums post-transfer, test on samples, and keep S3 backups until validation complete.
+
+- **Model accuracy/regression after migration**: Impact — High; Likelihood — Medium.
+    - Mitigation: run baseline model evaluations, A/B test SageMaker vs Vertex results, keep identical preprocessing and framework versions where possible, retrain/tune on GCP if needed, maintain versioned datasets.
+
+- **Security & compliance gaps**: Impact — High; Likelihood — Low–Medium.
+    - Mitigation: map IAM roles to GCP service accounts, enforce least-privilege, enable CMEK/KMS encryption, VPC Service Controls where required, and run compliance audits before decommissioning AWS resources.
+
+- **Cost overruns**: Impact — Medium; Likelihood — Medium.
+    - Mitigation: estimate costs upfront, use quotas and budget alerts, employ autoscaling and rightsizing, consider preemptible instances for non-critical workloads, and monitor billing during pilot.
+
+- **Operational/skill gaps**: Impact — Medium; Likelihood — High.
+    - Mitigation: schedule team training, create runbooks/playbooks, involve a GCP specialist for initial setup, and document operational procedures for Vertex tooling.
+
+- **Integration/configuration mismatches**: Impact — Medium; Likelihood — Medium.
+    - Mitigation: maintain a detailed mapping matrix (service, config keys, values), create reusable config templates, and perform staged migrations (dev → staging → prod).
+
+- **Deployment downtime / rollback risk**: Impact — High; Likelihood — Low–Medium.
+    - Mitigation: use blue-green or canary deployments, define clear rollback steps, reserve a maintenance window for cutover, and validate health checks and traffic splits.
+
+- **Monitoring and observability gaps**: Impact — Medium; Likelihood — Medium.
+    - Mitigation: replicate dashboards and alerts in GCP, validate telemetry (logs, traces, metrics), and run synthetic tests to confirm monitoring coverage.
+
+Risk Register Template (CSV):
+
+```
+Risk,Impact,Likelihood,Owner,Mitigation,Status
+Data transfer failure,High,Medium,DataEng,Use gsutil -m and checksums,Open
+Model accuracy drop,High,Medium,MLTeam,Baseline tests and retrain if needed,Open
+```
+
+---
+
 ## References & Resources
 
 - [GCP Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)
