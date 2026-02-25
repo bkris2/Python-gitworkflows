@@ -57,7 +57,7 @@ jobs:
 
   build-and-test:
     needs: check-approval
-    if: github.event_name == 'push' || (contains(fromJson('["master","main","develop"]'), github.event.pull_request.base.ref) && needs.check-approval.outputs.approved == 'true')
+    if: always() && (github.event_name == 'push' || (contains(fromJson('["master","main","develop"]'), github.event.pull_request.base.ref) && needs.check-approval.outputs.approved == 'true'))
     runs-on: ubuntu-latest
     
     steps:
