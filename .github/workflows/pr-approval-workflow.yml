@@ -1,5 +1,9 @@
 name: PR Approval & Trigger
 
+env:
+  ALLOWED_APPROVERS: '["bkris2","Ishup146","git-cc-aman"]'
+  APPROVAL_MESSAGE: 'bkris2, Ishup146, git-cc-aman'
+
 on:
   pull_request:
     branches: [master,main,develop]
@@ -24,6 +28,8 @@ jobs:
       - name: Check if approved by required approvers
         id: check_approval
         uses: actions/github-script@v6
+        env:
+          ALLOWED_APPROVERS: ${{ env.ALLOWED_APPROVERS }}
         with:
           script: |
             const { owner, repo, number } = context.issue;
@@ -33,7 +39,7 @@ jobs:
               pull_number: number
             });
 
-            const allowedApprovers = ['bkris2', 'Ishup146', 'git-cc-aman'];
+            const allowedApprovers = JSON.parse(process.env.ALLOWED_APPROVERS);
 
             const approved = reviews.data.some(review =>
               allowedApprovers.includes(review.user.login) && review.state === 'APPROVED'
@@ -45,7 +51,7 @@ jobs:
       - name: Waiting for PR approval
         if: steps.check_approval.outputs.approved != 'true'
         run: |
-          echo "⏳ PR is waiting for approval from one of: bkris2, Ishup146, git-cc-aman"
+          echo "⏳ PR is waiting for approval from one of: ${{ env.APPROVAL_MESSAGE }}"
 
   build-and-test:
     needs: check-approval
