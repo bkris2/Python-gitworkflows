@@ -79,10 +79,12 @@ jobs:
             console.log(`Approval by required approvers: ${approved}`);
             core.setOutput('approved', approved);
 
-      - name: Waiting for PR approval
+      - name: Fail if PR approval is missing
         if: steps.check_approval.outputs.approved != 'true'
         run: |
           echo "⏳ PR is waiting for approval from one of: ${{ env.APPROVAL_MESSAGE }}"
+          echo "❌ Approval gate failed. Build will not run without required PR approval."
+          exit 1
 
   build-and-test:
     needs: check-approval
