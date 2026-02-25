@@ -38,3 +38,17 @@ This project provides reusable module templates for:
 - Templates are intentionally minimal and deployment-safe for adaptation.
 - Keep feature engineering logic and schema aligned across both platforms.
 - Prefer managing secrets via IAM roles / service accounts, not hardcoded keys.
+
+## Model Parity Checklist
+
+| Model | AWS SageMaker Template | Vertex AI Template | Target Column | Suggested Primary Metric |
+|---|---|---|---|---|
+| Engagement Propensity | `aws_sagemaker/engagement_propensity_sagemaker_template.py` | `gcp_vertex_ai/engagement_propensity_vertex_template.py` | `engaged` | ROC-AUC |
+| Churn Prediction | `aws_sagemaker/churn_prediction_sagemaker_template.py` | `gcp_vertex_ai/churn_prediction_vertex_template.py` | `is_churned` | PR-AUC / F1 |
+
+### Validation Before Cutover
+
+- Use the same dataset snapshot and feature schema in both clouds.
+- Compare score distributions and threshold behavior, not only single metrics.
+- Validate online payload contract (field names, types, and ordering).
+- Keep model version tags aligned across AWS and GCP releases.
