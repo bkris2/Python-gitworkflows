@@ -1,0 +1,8 @@
+{
+  "role_arn": "arn:aws:iam::123456789012:role/SageMakerExecutionRole",
+  "instance_type": "ml.m5.xlarge",
+  "instance_count": 1,
+  "framework_version": "1.2-1",
+  "py_version": "py3",
+  "output_path": "s3://your-sagemaker-output-bucket/model-artifacts"
+}

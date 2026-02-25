@@ -1,0 +1,7 @@
+{
+  "project_id": "your-gcp-project-id",
+  "region": "us-central1",
+  "staging_bucket": "gs://your-vertex-staging-bucket",
+  "service_account": "vertex-ai-sa@your-gcp-project-id.iam.gserviceaccount.com",
+  "machine_type": "n1-standard-4"
+}
