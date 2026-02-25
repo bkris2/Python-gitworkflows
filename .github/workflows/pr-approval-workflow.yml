@@ -2,15 +2,17 @@ name: PR Approval & Trigger
 
 on:
   pull_request:
-    branches: [master]
+    branches: [master,main,develop]
     types: [opened, synchronize, reopened]
   pull_request_review:
-    branches: [master]
     types: [submitted]
 
 jobs:
   check-approval:
+    if: contains(fromJson('["master","main","develop"]'), github.event.pull_request.base.ref)
     runs-on: ubuntu-latest
+    outputs:
+      approved: ${{ steps.check_approval.outputs.approved }}
     permissions:
       contents: read
       pull-requests: read
@@ -19,7 +21,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Check if approved by bkris2
+      - name: Check if approved by required approvers
         id: check_approval
         uses: actions/github-script@v6
         with:
@@ -31,21 +33,23 @@ jobs:
               pull_number: number
             });
 
-            const approvalByBkris2 = reviews.data.some(review =>
-              review.user.login === 'bkris2' && review.state === 'APPROVED'
+            const allowedApprovers = ['bkris2', 'Ishup146'];
+
+            const approved = reviews.data.some(review =>
+              allowedApprovers.includes(review.user.login) && review.state === 'APPROVED'
             );
 
-            console.log(`Approval by bkris2: ${approvalByBkris2}`);
-            core.setOutput('approved', approvalByBkris2);
+            console.log(`Approval by required approvers: ${approved}`);
+            core.setOutput('approved', approved);
 
-      - name: Fail if not approved by bkris2
+      - name: Waiting for PR approval
         if: steps.check_approval.outputs.approved != 'true'
         run: |
-          echo "❌ PR must be approved by bkris2 before workflow can proceed"
-          exit 1
+          echo "⏳ PR is waiting for approval from one of: bkris2, Ishup146"
 
   build-and-test:
     needs: check-approval
+    if: contains(fromJson('["master","main","develop"]'), github.event.pull_request.base.ref) && needs.check-approval.outputs.approved == 'true'
     runs-on: ubuntu-latest
     
     steps:
@@ -73,4 +77,4 @@ jobs:
           pytest tests/ -v 2>/dev/null || echo "No tests found"
 
       - name: ✅ Workflow completed successfully
-        run: echo "All checks passed after bkris2 approval!"
+        run: echo "All checks passed after required approval!"
