@@ -5,6 +5,8 @@ env:
   APPROVAL_MESSAGE: 'bkris2, Ishup146, git-cc-aman'
 
 on:
+  push:
+    branches: [master,main,develop]
   pull_request:
     branches: [master,main,develop]
     types: [opened, synchronize, reopened]
@@ -13,7 +15,7 @@ on:
 
 jobs:
   check-approval:
-    if: contains(fromJson('["master","main","develop"]'), github.event.pull_request.base.ref)
+    if: github.event_name != 'push' && contains(fromJson('["master","main","develop"]'), github.event.pull_request.base.ref)
     runs-on: ubuntu-latest
     outputs:
       approved: ${{ steps.check_approval.outputs.approved }}
@@ -55,7 +57,7 @@ jobs:
 
   build-and-test:
     needs: check-approval
-    if: contains(fromJson('["master","main","develop"]'), github.event.pull_request.base.ref) && needs.check-approval.outputs.approved == 'true'
+    if: github.event_name == 'push' || (contains(fromJson('["master","main","develop"]'), github.event.pull_request.base.ref) && needs.check-approval.outputs.approved == 'true')
     runs-on: ubuntu-latest
     
     steps:
