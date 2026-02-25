@@ -33,7 +33,7 @@ jobs:
               pull_number: number
             });
 
-            const allowedApprovers = ['bkris2', 'Ishup146'];
+            const allowedApprovers = ['bkris2', 'Ishup146', 'git-cc-aman'];
 
             const approved = reviews.data.some(review =>
               allowedApprovers.includes(review.user.login) && review.state === 'APPROVED'
@@ -45,7 +45,7 @@ jobs:
       - name: Waiting for PR approval
         if: steps.check_approval.outputs.approved != 'true'
         run: |
-          echo "⏳ PR is waiting for approval from one of: bkris2, Ishup146"
+          echo "⏳ PR is waiting for approval from one of: bkris2, Ishup146, git-cc-aman"
 
   build-and-test:
     needs: check-approval
