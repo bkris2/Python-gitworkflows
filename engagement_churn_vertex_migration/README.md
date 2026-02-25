@@ -52,3 +52,10 @@ This project provides reusable module templates for:
 - Compare score distributions and threshold behavior, not only single metrics.
 - Validate online payload contract (field names, types, and ordering).
 - Keep model version tags aligned across AWS and GCP releases.
+
+## PR Review Checklist
+
+- Confirm target columns are consistent (`engaged`, `is_churned`).
+- Confirm SageMaker and Vertex templates stay behaviorally aligned.
+- Confirm config templates contain only placeholders, no secrets.
+- Confirm migration mapping and runbook remain in sync.
